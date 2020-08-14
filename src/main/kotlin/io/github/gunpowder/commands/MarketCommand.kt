@@ -183,9 +183,45 @@ object MarketCommand {
         player.closeCurrentScreen()
 
         val gui = ChestGui.builder {
-            // refreshInterval(1) TODO: Figure out how to do this reliably
             player(context.source.player)
             emptyIcon(ItemStack(Items.BLACK_STAINED_GLASS_PANE))
+
+            refreshInterval(1) {
+                it.clearButtons()
+                val ets = marketHandler.getEntries().filter { itt -> itt.expire.isAfter(LocalDateTime.now()) }
+                val etsDisplay = ets.subList(page * 45, Integer.min((page + 1) * 45, ets.size))
+                etsDisplay.forEachIndexed { index, storedMarketEntry ->
+                    it.button(index % 9, index / 9, storedMarketEntry.item) {
+                        buyItem(player, storedMarketEntry)
+                    }
+                }
+
+                // Navigation
+                for (i in 0 until 9) {
+                    // Filler
+                    it.button(i, 5, ItemStack(Items.GREEN_STAINED_GLASS_PANE)) { }
+                }
+
+                if (maxPage != 0) {
+                    it.button(0, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Previous page"))) {
+                        val prevPage = if (page == 0) maxPage else page - 1
+                        try {
+                            openGui(context, ets, prevPage, maxPage)
+                        } catch (e: StackOverflowError) {
+                            player.closeCurrentScreen()
+                        }
+                    }
+
+                    it.button(8, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Next page"))) {
+                        val nextPage = if (page == maxPage) 0 else page + 1
+                        try {
+                            openGui(context, ets, nextPage, maxPage)
+                        } catch (e: StackOverflowError) {
+                            player.closeCurrentScreen()
+                        }
+                    }
+                }
+            }
 
             // Add all market buttons
             val itemsOnDisplay = entries.subList(page * 45, Integer.min((page + 1) * 45, entries.size))
