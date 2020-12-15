@@ -1,4 +1,4 @@
-# Gunpowder Market 1.0.0
+# Gunpowder Market 1.0.1
 
 - Update to Gunpowder Core 0.3.2 (1.16.4)
 - Notify a seller using the sidebar
