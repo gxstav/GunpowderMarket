@@ -31,9 +31,11 @@ import com.mojang.brigadier.context.CommandContext
 import io.github.gunpowder.api.GunpowderMod
 import io.github.gunpowder.api.builders.ChestGui
 import io.github.gunpowder.api.builders.Command
+import io.github.gunpowder.api.builders.SidebarInfo
 import io.github.gunpowder.api.module.currency.modelhandlers.BalanceHandler
 import io.github.gunpowder.api.module.market.dataholders.StoredMarketEntry
 import io.github.gunpowder.api.module.market.modelhandlers.MarketEntryHandler
+import io.github.gunpowder.api.util.TranslatedText
 import io.github.gunpowder.configs.MarketConfig
 import net.fabricmc.fabric.api.util.NbtType
 import net.minecraft.item.ItemStack
@@ -43,8 +45,10 @@ import net.minecraft.network.packet.s2c.play.OpenScreenS2CPacket
 import net.minecraft.server.command.ServerCommandSource
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.LiteralText
+import net.minecraft.util.Formatting
 import net.minecraft.util.ItemScatterer
 import java.time.LocalDateTime
+import kotlin.concurrent.thread
 
 object MarketCommand {
     private val marketHandler by lazy {
@@ -180,7 +184,7 @@ object MarketCommand {
 
     private fun openGui(context: CommandContext<ServerCommandSource>, entries: List<StoredMarketEntry>, page: Int, maxPage: Int) {
         val player = context.source.player
-        player.closeCurrentScreen()
+        player.closeHandledScreen()
 
         val gui = ChestGui.builder {
             player(context.source.player)
@@ -208,7 +212,7 @@ object MarketCommand {
                         try {
                             openGui(context, ets, prevPage, maxPage)
                         } catch (e: StackOverflowError) {
-                            player.closeCurrentScreen()
+                            player.closeHandledScreen()
                         }
                     }
 
@@ -217,7 +221,7 @@ object MarketCommand {
                         try {
                             openGui(context, ets, nextPage, maxPage)
                         } catch (e: StackOverflowError) {
-                            player.closeCurrentScreen()
+                            player.closeHandledScreen()
                         }
                     }
                 }
@@ -243,7 +247,7 @@ object MarketCommand {
                     try {
                         openGui(context, entries, prevPage, maxPage)
                     } catch (e: StackOverflowError) {
-                        player.closeCurrentScreen()
+                        player.closeHandledScreen()
                     }
                 }
 
@@ -252,7 +256,7 @@ object MarketCommand {
                     try {
                         openGui(context, entries, nextPage, maxPage)
                     } catch (e: StackOverflowError) {
-                        player.closeCurrentScreen()
+                        player.closeHandledScreen()
                     }
                 }
             }
@@ -285,6 +289,8 @@ object MarketCommand {
 
                 // Remove listing data
                 val item = entry.item
+                val tkey = item.translationKey
+                val amount = item.count
                 val tag = item.tag!!
                 val display = tag.getCompound("display")
                 val lore = display.getList("Lore", NbtType.STRING) as ListTag
@@ -320,9 +326,22 @@ object MarketCommand {
                 player.sendMessage(
                         LiteralText("Successfully purchased item!"),
                         false)
-                player.server.playerManager.getPlayer(entry.uuid)?.sendMessage(
-                        LiteralText("${player.entityName} purchased one of your items!"),
-                        false)
+                val p = player.server.playerManager.getPlayer(entry.uuid) ?: return
+                val sidebar = SidebarInfo.factory {
+                    displayTitle(LiteralText("Item sold!"))
+                    line("One of your items was sold!")
+                    line("")
+
+                    // TODO: Change this when updating to Gunpowder Core 0.3.3
+                    line("Item: ${amount}x ${TranslatedText(tkey).translate("en_us")}", Formatting.GREEN)
+                    line("Price: ${entry.price}", Formatting.BLUE)
+                }(p)
+
+                thread(start = true) {
+                    Thread.sleep(5000)
+                    sidebar.remove()
+                }
+
 
             } else {
                 player.sendMessage(LiteralText("Item no longer available"), false)

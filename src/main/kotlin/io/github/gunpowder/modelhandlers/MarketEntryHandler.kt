@@ -26,7 +26,9 @@ package io.github.gunpowder.modelhandlers
 
 import io.github.gunpowder.api.GunpowderMod
 import io.github.gunpowder.api.module.market.dataholders.StoredMarketEntry
+import io.github.gunpowder.loadItemStack
 import io.github.gunpowder.models.MarketEntryTable
+import io.github.gunpowder.saveItemStack
 import net.minecraft.item.ItemStack
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.ListTag
@@ -53,7 +55,13 @@ object MarketEntryHandler : APIMarketEntryHandler {
 
     private fun loadEntries() {
         val items = db.transaction {
-            MarketEntryTable.selectAll().map {
+            val results = MarketEntryTable.selectAll()
+
+            if (results.empty()) {
+                return@transaction listOf<StoredMarketEntry>()
+            }
+
+            return@transaction results.map {
                 StoredMarketEntry(
                         it[MarketEntryTable.user],
                         loadItemStack(it[MarketEntryTable.item]),
@@ -63,20 +71,6 @@ object MarketEntryHandler : APIMarketEntryHandler {
             }.toList()
         }.get()
         cache.addAll(items)
-    }
-
-    // TODO: Move these two to util funcs
-    private fun loadItemStack(blob: ExposedBlob): ItemStack {
-        val tag = NbtIo.readCompressed(blob.bytes.inputStream())
-        return ItemStack.fromTag(tag)
-    }
-
-    private fun saveItemStack(stack: ItemStack): ExposedBlob {
-        val tag = CompoundTag()
-        val stream = ByteArrayOutputStream()
-        stack.toTag(tag)
-        NbtIo.writeCompressed(tag, stream)
-        return ExposedBlob(stream.toByteArray())
     }
 
     override fun createEntry(e: StoredMarketEntry) {

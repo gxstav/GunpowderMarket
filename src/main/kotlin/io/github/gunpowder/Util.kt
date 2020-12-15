@@ -22,15 +22,25 @@
  * SOFTWARE.
  */
 
-package io.github.gunpowder.models
+package io.github.gunpowder
 
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.`java-time`.datetime
+import net.minecraft.item.ItemStack
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.nbt.NbtIo
+import org.jetbrains.exposed.sql.statements.api.ExposedBlob
+import java.io.ByteArrayOutputStream
 
-object MarketEntryTable : Table() {
-    val user = uuid("user")
-    val item = blob("itemstack")
-    val price = decimal("price", 64, 2)
-    val expiresAt = datetime("expires")
-    override val primaryKey = PrimaryKey(user, expiresAt)
+
+// TODO: Move these two to util funcs
+fun loadItemStack(blob: ExposedBlob): ItemStack {
+    val tag = NbtIo.readCompressed(blob.bytes.inputStream())
+    return ItemStack.fromTag(tag)
+}
+
+fun saveItemStack(stack: ItemStack): ExposedBlob {
+    val tag = CompoundTag()
+    val stream = ByteArrayOutputStream()
+    stack.toTag(tag)
+    NbtIo.writeCompressed(tag, stream)
+    return ExposedBlob(stream.toByteArray())
 }
