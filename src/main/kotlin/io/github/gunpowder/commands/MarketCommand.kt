@@ -85,7 +85,7 @@ object MarketCommand {
 
     private fun collectMarketExpired(context: CommandContext<ServerCommandSource>): Int {
         val player = context.source.player
-        val entries = marketHandler.getEntries().filter { it.expire.isBefore(LocalDateTime.now()) }
+        val entries = marketHandler.getEntries().filter { it.expire.isBefore(LocalDateTime.now()) && it.uuid == player.uuid }
 
         entries.forEach { entry ->
             marketHandler.deleteEntry(entry)
