@@ -38,16 +38,24 @@ import io.github.gunpowder.api.module.market.modelhandlers.MarketEntryHandler
 import io.github.gunpowder.api.util.TranslatedText
 import io.github.gunpowder.configs.MarketConfig
 import net.fabricmc.fabric.api.util.NbtType
+import net.minecraft.entity.player.PlayerEntity
+import net.minecraft.entity.player.PlayerInventory
 import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
 import net.minecraft.nbt.ListTag
-import net.minecraft.network.packet.s2c.play.OpenScreenS2CPacket
+import net.minecraft.nbt.StringTag
+import net.minecraft.nbt.Tag
+import net.minecraft.screen.NamedScreenHandlerFactory
+import net.minecraft.screen.ScreenHandler
 import net.minecraft.server.command.ServerCommandSource
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.text.LiteralText
+import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.util.ItemScatterer
+import java.time.Duration
 import java.time.LocalDateTime
+import java.util.*
 import kotlin.concurrent.thread
 
 object MarketCommand {
@@ -57,6 +65,9 @@ object MarketCommand {
     private val balanceHandler by lazy {
         GunpowderMod.instance.registry.getModelHandler(BalanceHandler::class.java)
     }
+
+    private val EMPTY: ItemStack
+        get() = ItemStack(Items.BLACK_STAINED_GLASS_PANE)
 
     private val maxEntriesPerUser
         get() = GunpowderMod.instance.registry.getConfig(MarketConfig::class.java).maxMarketsPerUser
@@ -157,24 +168,26 @@ object MarketCommand {
         context.source.player.mainHandStack.count = item.count - amount
         item.count = amount
 
-        val entry = StoredMarketEntry(
-                context.source.player.uuid,
+        for (x in 0 until 90) {
+            val entry = StoredMarketEntry(
+                UUID.randomUUID(),
                 item,
-                DoubleArgumentType.getDouble(context, "price").toBigDecimal(),
+                DoubleArgumentType.getDouble(context, "price").toBigDecimal() + Random().nextInt().toBigDecimal(),
                 LocalDateTime.now().plusDays(7)
-        )
+            )
 
-        // Remove from user invstack
-        marketHandler.createEntry(entry)
+            marketHandler.createEntry(entry)
+        }
+
 
         return 1
     }
 
     private fun viewMarket(context: CommandContext<ServerCommandSource>): Int {
         val entries = marketHandler.getEntries().filter { it.expire.isAfter(LocalDateTime.now()) }
-        val maxPages = entries.size / 45
+
         try {
-            openGui(context, entries, 0, maxPages)
+            openGui(context, entries, 0)
         } catch (e: Exception) {
             e.printStackTrace()
             throw e
@@ -182,90 +195,98 @@ object MarketCommand {
         return 1
     }
 
-    private fun openGui(context: CommandContext<ServerCommandSource>, entries: List<StoredMarketEntry>, page: Int, maxPage: Int) {
+    private fun openGui(context: CommandContext<ServerCommandSource>, entries: List<StoredMarketEntry>, p: Int) {
+
         val player = context.source.player
-        player.closeHandledScreen()
 
-        val gui = ChestGui.builder {
-            player(context.source.player)
-            emptyIcon(ItemStack(Items.BLACK_STAINED_GLASS_PANE))
+        var page = p
+        var maxPage = entries.size / 45
 
-            refreshInterval(1) {
-                it.clearButtons()
-                val ets = marketHandler.getEntries().filter { itt -> itt.expire.isAfter(LocalDateTime.now()) }
-                val etsDisplay = ets.subList(page * 45, Integer.min((page + 1) * 45, ets.size))
-                etsDisplay.forEachIndexed { index, storedMarketEntry ->
-                    it.button(index % 9, index / 9, storedMarketEntry.item) {
-                        buyItem(player, storedMarketEntry)
-                    }
-                }
+        fun reload(this_: ChestGui.Container) {
+            val newEntries = marketHandler.getEntries().filter { it.expire.isAfter(LocalDateTime.now()) }
+            maxPage = newEntries.size / 45
 
-                // Navigation
-                for (i in 0 until 9) {
-                    // Filler
-                    it.button(i, 5, ItemStack(Items.GREEN_STAINED_GLASS_PANE)) { }
-                }
-
-                if (maxPage != 0) {
-                    it.button(0, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Previous page"))) {
-                        val prevPage = if (page == 0) maxPage else page - 1
-                        try {
-                            openGui(context, ets, prevPage, maxPage)
-                        } catch (e: StackOverflowError) {
-                            player.closeHandledScreen()
-                        }
-                    }
-
-                    it.button(8, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Next page"))) {
-                        val nextPage = if (page == maxPage) 0 else page + 1
-                        try {
-                            openGui(context, ets, nextPage, maxPage)
-                        } catch (e: StackOverflowError) {
-                            player.closeHandledScreen()
-                        }
-                    }
-                }
-            }
-
-            // Add all market buttons
-            val itemsOnDisplay = entries.subList(page * 45, Integer.min((page + 1) * 45, entries.size))
+            val itemsOnDisplay = newEntries.subList(page * 45, Integer.min((page + 1) * 45, newEntries.size))
             itemsOnDisplay.forEachIndexed { index, storedMarketEntry ->
-                button(index % 9, index / 9, storedMarketEntry.item) {
+                val timeLeft = Duration.between(LocalDateTime.now(), storedMarketEntry.expire)
+                val timeString = "${timeLeft.toDays()}d ${timeLeft.toHours() % 24}h " +
+                        "${timeLeft.toMinutes() % 60}m ${timeLeft.seconds % 60}s"
+
+                val tag = storedMarketEntry.item.tag!!
+                val display = tag.getCompound("display")
+                val lore = display.getList("Lore", NbtType.STRING)
+
+                // Remove existing lore
+                val oldTags = mutableListOf<Tag>()
+                for (x in 3 downTo 0) {
+                    oldTags.add(lore.removeAt(x))
+                }
+                val newLore = ListTag()
+                oldTags.reverse()
+                oldTags.removeLast()
+                newLore.addAll(oldTags)
+                newLore.add(
+                    StringTag.of("[{\"text\":\"Expires in: \",\"color\":\"white\",\"italic\":false},{\"text\":\"$timeString\",\"color\":\"gray\",\"italic\":false}]")
+                )
+                for (i in 0 until lore.lastIndex) {
+                    newLore.add(lore[i])
+                }
+                display.put("Lore", newLore)
+                storedMarketEntry.item.putSubTag("display", display)
+                storedMarketEntry.item.tag = tag
+
+                this_.button(index % 9, index / 9, storedMarketEntry.item) { it, c ->
                     buyItem(player, storedMarketEntry)
                 }
             }
+            if (itemsOnDisplay.size < 45) {
+                for (x in itemsOnDisplay.size until 45) {
+                    this_.button(x % 9, x / 9, EMPTY) { it, c ->
 
-            // Navigation
-            for (i in 0 until 9) {
-                // Filler
-                button(i, 5, ItemStack(Items.GREEN_STAINED_GLASS_PANE)) { }
-            }
-
-            if (maxPage != 0) {
-                button(0, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Previous page"))) {
-                    val prevPage = if (page == 0) maxPage else page - 1
-                    try {
-                        openGui(context, entries, prevPage, maxPage)
-                    } catch (e: StackOverflowError) {
-                        player.closeHandledScreen()
-                    }
-                }
-
-                button(8, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Next page"))) {
-                    val nextPage = if (page == maxPage) 0 else page + 1
-                    try {
-                        openGui(context, entries, nextPage, maxPage)
-                    } catch (e: StackOverflowError) {
-                        player.closeHandledScreen()
                     }
                 }
             }
         }
 
-        player.networkHandler.sendPacket(
-                OpenScreenS2CPacket(gui.syncId, gui.type, LiteralText("Market")))
-        gui.addListener(player)
-        player.currentScreenHandler = gui
+        val gui = ChestGui.factory {
+            player(context.source.player)
+            emptyIcon(EMPTY)
+
+            refreshInterval(1) {
+                reload(it)
+            }
+
+            // Navigation
+            for (i in 0 until 9) {
+                // Filler
+                button(i, 5, ItemStack(Items.GREEN_STAINED_GLASS_PANE)) { it, c -> }
+            }
+
+            if (maxPage != 0) {
+                button(0, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Previous page"))) { it, container ->
+                    val prevPage = if (page == 0) maxPage else page - 1
+                    page = prevPage
+                    reload(container)
+                }
+
+                button(8, 5, ItemStack(Items.BLUE_STAINED_GLASS_PANE).setCustomName(LiteralText("Next page"))) { it, container ->
+                    val nextPage = if (page == maxPage) 0 else page + 1
+                    page = nextPage
+                    reload(container)
+                }
+            }
+        }
+
+        player.openHandledScreen(object : NamedScreenHandlerFactory {
+            override fun createMenu(syncId: Int, inv: PlayerInventory, p: PlayerEntity): ScreenHandler {
+                return gui.invoke(syncId, p as ServerPlayerEntity)
+            }
+
+            override fun getDisplayName(): Text {
+                return LiteralText("Market")
+            }
+
+        })
     }
 
     private fun buyItem(player: ServerPlayerEntity, entry: StoredMarketEntry) {

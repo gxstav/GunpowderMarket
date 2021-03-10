@@ -88,7 +88,7 @@ object MarketEntryHandler : APIMarketEntryHandler {
     override fun getEntries(): List<StoredMarketEntry> {
         return cache.toList().sortedBy { it.expire }.also {
             it.forEach { entry ->
-                val seller = GunpowderMod.instance.server.userCache.getByUuid(entry.uuid)!!.name
+                val seller = GunpowderMod.instance.server.userCache.getByUuid(entry.uuid)?.name ?: "DummySeller"
                 val timeLeft = Duration.between(LocalDateTime.now(), entry.expire)
                 val timeString = "${timeLeft.toDays()}d ${timeLeft.toHours() % 24}h " +
                         "${timeLeft.toMinutes() % 60}m ${timeLeft.seconds % 60}s"

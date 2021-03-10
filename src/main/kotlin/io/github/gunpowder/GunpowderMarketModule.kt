@@ -48,7 +48,7 @@ class GunpowderMarketModule : GunpowderModule {
 
     override fun onInitialize() {
         gunpowder.registry.registerTable(MarketEntryTable)
-        gunpowder.registry.registerModelHandler(APIMarketEntryHandler::class.java, Supplier { MarketEntryHandler })
+        gunpowder.registry.registerModelHandler(APIMarketEntryHandler::class.java) { MarketEntryHandler }
     }
 
 }
