@@ -168,16 +168,14 @@ object MarketCommand {
         context.source.player.mainHandStack.count = item.count - amount
         item.count = amount
 
-        for (x in 0 until 90) {
-            val entry = StoredMarketEntry(
-                UUID.randomUUID(),
-                item,
-                DoubleArgumentType.getDouble(context, "price").toBigDecimal() + Random().nextInt().toBigDecimal(),
-                LocalDateTime.now().plusDays(7)
-            )
+        val entry = StoredMarketEntry(
+            UUID.randomUUID(),
+            item,
+            DoubleArgumentType.getDouble(context, "price").toBigDecimal() + Random().nextInt().toBigDecimal(),
+            LocalDateTime.now().plusDays(7)
+        )
 
-            marketHandler.createEntry(entry)
-        }
+        marketHandler.createEntry(entry)
 
 
         return 1
