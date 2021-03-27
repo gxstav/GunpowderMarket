@@ -171,7 +171,7 @@ object MarketCommand {
         val entry = StoredMarketEntry(
             UUID.randomUUID(),
             item,
-            DoubleArgumentType.getDouble(context, "price").toBigDecimal() + Random().nextInt().toBigDecimal(),
+            DoubleArgumentType.getDouble(context, "price").toBigDecimal(),
             LocalDateTime.now().plusDays(7)
         )
 
