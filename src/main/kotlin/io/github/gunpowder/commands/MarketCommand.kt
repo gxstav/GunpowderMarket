@@ -169,7 +169,7 @@ object MarketCommand {
         item.count = amount
 
         val entry = StoredMarketEntry(
-            UUID.randomUUID(),
+            context.source.player.uuid,
             item,
             DoubleArgumentType.getDouble(context, "price").toBigDecimal(),
             LocalDateTime.now().plusDays(7)
